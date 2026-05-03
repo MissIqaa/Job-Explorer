@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Explorer: Green Win Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF6B6B;
+            --secondary: #4ECDC4;
+            --accent: #FFE66D;
+            --correct-bg: #2ecc71;
+            --bg: #eef2f3;
+            --text: #2F2F2F;
+        }
+
+        * { box-sizing: border-box; font-family: 'Comic Neue', cursive; }
+
+        body {
+            margin: 0;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #game-container {
+            width: 95%;
+            max-width: 1000px;
+            text-align: center;
+            padding: 10px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 { font-family: 'Fredoka One', cursive; color: var(--primary); font-size: 2.5rem; text-shadow: 2px 2px var(--accent); margin: 10px 0; }
+
+        .menu-btn {
+            background: var(--secondary);
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.4rem;
+            border-radius: 50px;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 6px #369b94;
+            transition: 0.2s;
+            margin: 10px;
+        }
+
+        .menu-btn:active { box-shadow: 0 2px #369b94; transform: translateY(4px); }
+        .menu-btn.orange { background: #ff9f43; box-shadow: 0 6px #cf8135; }
+
+        .screen { display: none; flex-direction: column; align-items: center; height: 100%; }
+        .active { display: flex; }
+
+        .floating-container {
+            position: relative;
+            flex-grow: 1;
+            width: 100%;
+            background: white;
+            border: 5px solid var(--secondary);
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .floating-job {
+            position: absolute;
+            background: white;
+            border: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 110px;
+            height: 110px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.85rem;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+            user-select: none;
+            z-index: 10;
+            /* Using will-change for smoother animation performance */
+            will-change: transform;
+        }
+
+        /* The "Win" state for the clicked icon */
+        .floating-job.correct-hit {
+            background-color: var(--correct-bg) !important;
+            border-color: #27ae60 !important;
+            color: white;
+            z-index: 100;
+            animation: pulseCorrect 0.6s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulseCorrect {
+            from { transform: translate(var(--curr-x), var(--curr-y)) scale(1); }
+            to { transform: translate(var(--curr-x), var(--curr-y)) scale(1.15); }
+        }
+
+        .floating-job span { font-size: 2.2rem; pointer-events: none; }
+        .floating-job strong { pointer-events: none; }
+
+        .stats-bar { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px; }
+        .pill { background: var(--accent); padding: 8px 20px; border-radius: 25px; font-weight: bold; border: 2px solid #ddd; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="main-menu" class="screen active">
+            <h1>Job Explorer 🌟</h1>
+            <p style="font-size: 1.3rem;">Listen to the job and find the icon!</p>
+            <button class="menu-btn" onclick="startLearning()">📖 Learning Mode</button>
+            <button class="menu-btn orange" onclick="startGame(false)">🎮 Easy Game</button>
+            <button class="menu-btn orange" onclick="startGame(true)">⏱️ Hard (Timer)</button>
+        </div>
+
+        <div id="learning-mode" class="screen">
+            <button class="menu-btn" style="align-self: flex-start;" onclick="showMenu()">⬅ Back</button>
+            <div id="learning-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:15px; width:100%; padding:20px;"></div>
+        </div>
+
+        <div id="game-play" class="screen">
+            <div class="stats-bar">
+                <div class="pill">Score: <span id="score">0</span>/10</div>
+                <button class="menu-btn" style="margin:0; padding:10px 20px;" onclick="repeatAudio()">🔊 Hear Again</button>
+                <div class="pill" id="timer-box">⏳ <span id="timer">60</span>s</div>
+            </div>
+            <div id="feedback" style="font-size: 1.6rem; font-weight: bold; height: 35px;"></div>
+            <div class="floating-container" id="game-grid"></div>
+        </div>
+
+        <div id="end-screen" class="screen">
+            <h1 id="result-title">Great Work!</h1>
+            <div style="font-size: 5rem;">✨🌈✨</div>
+            <p id="result-score" style="font-size: 1.8rem;"></p>
+            <button class="menu-btn" onclick="showMenu()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const jobs = [
+            { id: 'teacher', name: 'Teacher', icon: '👩‍🏫', text: "I work in a school. I teach students new things every day. I love helping children learn and grow." },
+            { id: 'vet', name: 'Vet', icon: '🐶', text: "I work in an animal clinic. I help sick or injured animals and make them feel better. I love caring for pets." },
+            { id: 'paramedic', name: 'Paramedic', icon: '🚑', text: "I work in an ambulance. I help people who are sick or hurt. I like helping people in emergencies." },
+            { id: 'artist', name: 'Artist', icon: '🎨', text: "I work in a studio. I draw and paint pictures. I love being creative and making art." },
+            { id: 'farmer', name: 'Farmer', icon: '👩‍🌾', text: "I work on a farm. I grow crops and take care of animals. I enjoy working outdoors." },
+            { id: 'firefighter', name: 'Firefighter', icon: '👨‍🚒', text: "I work at a fire station. I put out fires and rescue people. I like to keep people safe." },
+            { id: 'architect', name: 'Architect', icon: '📐', text: "I work in an office. I design buildings and plan how they look. I enjoy creating new ideas." },
+            { id: 'engineer', name: 'Engineer', icon: '⚙️', text: "I work with machines and systems. I build and fix things. I like solving problems." }
+        ];
+
+        let currentTarget = null, score = 0, rounds = 0, timeLeft = 60, timerInterval;
+        let bubbles = [], animationId, isPaused = false;
+
+        function speak(msg) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(msg);
+            const voices = window.speechSynthesis.getVoices();
+            const premiumVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google')) && v.lang.includes('en')) || voices.find(v => v.lang.includes('en'));
+            if (premiumVoice) utterance.voice = premiumVoice;
+            utterance.rate = 0.85;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function showMenu() {
+            cancelAnimationFrame(animationId);
+            clearInterval(timerInterval);
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('main-menu').classList.add('active');
+        }
+
+        function startLearning() {
+            const grid = document.getElementById('learning-grid');
+            grid.innerHTML = '';
+            jobs.forEach(job => {
+                const card = document.createElement('div');
+                card.className = 'job-card';
+                card.style = "background:white; border:4px solid var(--secondary); border-radius:20px; padding:20px; cursor:pointer; text-align:center;";
+                card.innerHTML = `<span style="font-size:3.5rem; display:block;">${job.icon}</span><strong>${job.name}</strong>`;
+                card.onclick = () => speak(job.text);
+                grid.appendChild(card);
+            });
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('learning-mode').classList.add('active');
+        }
+
+        function startGame(withTimer) {
+            score = 0; rounds = 0; isPaused = false;
+            document.getElementById('score').innerText = score;
+            document.getElementById('timer-box').style.display = withTimer ? 'block' : 'none';
+            if (withTimer) {
+                timeLeft = 60;
+                clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    if(!isPaused) {
+                        timeLeft--;
+                        document.getElementById('timer').innerText = timeLeft;
+                        if (timeLeft <= 0) endGame();
+                    }
+                }, 1000);
+            }
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('game-play').classList.add('active');
+            nextRound();
+        }
+
+        function nextRound() {
+            if (rounds >= 10) return endGame();
+            rounds++;
+            isPaused = false;
+            currentTarget = jobs[Math.floor(Math.random() * jobs.length)];
+            
+            const container = document.getElementById('game-grid');
+            container.innerHTML = '';
+            bubbles = [];
+            const rect = container.getBoundingClientRect();
+
+            jobs.forEach(job => {
+                const el = document.createElement('div');
+                el.className = 'floating-job';
+                el.innerHTML = `<span>${job.icon}</span><strong>${job.name}</strong>`;
+                container.appendChild(el);
+
+                bubbles.push({
+                    el, id: job.id, r: 55,
+                    x: Math.random() * (rect.width - 110) + 55,
+                    y: Math.random() * (rect.height - 110) + 55,
+                    vx: (Math.random() - 0.5) * 2.5,
+                    vy: (Math.random() - 0.5) * 2.5
+                });
+                el.onclick = () => checkAnswer(job.id, el);
+            });
+
+            cancelAnimationFrame(animationId);
+            animate();
+            setTimeout(() => speak(currentTarget.text), 600);
+        }
+
+        function animate() {
+            if (isPaused) return;
+
+            const container = document.getElementById('game-grid');
+            const rect = container.getBoundingClientRect();
+
+            bubbles.forEach((b1, i) => {
+                b1.x += b1.vx; b1.y += b1.vy;
+
+                if (b1.x - b1.r < 0 || b1.x + b1.r > rect.width) b1.vx *= -1;
+                if (b1.y - b1.r < 0 || b1.y + b1.r > rect.height) b1.vy *= -1;
+
+                for (let j = i + 1; j < bubbles.length; j++) {
+                    const b2 = bubbles[j], dx = b2.x - b1.x, dy = b2.y - b1.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < b1.r + b2.r) {
+                        [b1.vx, b2.vx] = [b2.vx, b1.vx];
+                        [b1.vy, b2.vy] = [b2.vy, b1.vy];
+                        const overlap = (b1.r + b2.r) - dist;
+                        b1.x -= (dx/dist) * overlap/2; b1.y -= (dy/dist) * overlap/2;
+                    }
+                }
+                // Apply current position
+                b1.el.style.transform = `translate(${b1.x - b1.r}px, ${b1.y - b1.r}px)`;
+            });
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function checkAnswer(id, el) {
+            if (isPaused) return;
+
+            const fb = document.getElementById('feedback');
+            if (id === currentTarget.id) {
+                isPaused = true;
+                score++;
+                document.getElementById('score').innerText = score;
+                
+                // Get the current translation position of the bubble
+                const bubbleData = bubbles.find(b => b.el === el);
+                const currentPosX = `${bubbleData.x - bubbleData.r}px`;
+                const currentPosY = `${bubbleData.y - bubbleData.r}px`;
+
+                // Lock the bubble in its current spot using CSS variables for the pulse animation
+                el.style.setProperty('--curr-x', currentPosX);
+                el.style.setProperty('--curr-y', currentPosY);
+                el.classList.add('correct-hit');
+                
+                fb.innerText = "⭐ Great Job!";
+                fb.style.color = "var(--correct-bg)";
+                speak("Great job!");
+                
+                setTimeout(() => {
+                    fb.innerText = "";
+                    nextRound();
+                }, 1600);
+            } else {
+                fb.innerText = "Try again! 🌈";
+                fb.style.color = "#e74c3c";
+                speak("Try again!");
+            }
+        }
+
+        function repeatAudio() { speak(currentTarget.text); }
+
+        function endGame() {
+            isPaused = true;
+            cancelAnimationFrame(animationId);
+            clearInterval(timerInterval);
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('end-screen').classList.add('active');
+            document.getElementById('result-score').innerText = `You found ${score} jobs!`;
+            speak("Well done! You found " + score + " jobs today.");
+        }
+    </script>
+</body>
+</html>
